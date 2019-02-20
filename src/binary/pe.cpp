@@ -97,3 +97,107 @@ const uint8_t* PeImage::ptr_from_rva(uint32_t rva) const {
 
 } // namespace binary
 } // namespace bypasscore
+
+std::vector<PeImage::ImportEntry> PeImage::parse_imports() const {
+    std::vector<ImportEntry> imports;
+    auto dir = get_data_directory(DIR_IMPORT);
+    if (dir.virtual_address == 0 || dir.size == 0) return imports;
+
+    const uint8_t* import_base = ptr_from_rva(dir.virtual_address);
+    if (!import_base) return imports;
+
+    // Walk import descriptors (each 20 bytes, null-terminated)
+    for (size_t offset = 0; ; offset += 20) {
+        if (offset + 20 > dir.size) break;
+        const uint8_t* desc = import_base + offset;
+        uint32_t oft      = *reinterpret_cast<const uint32_t*>(desc);
+        uint32_t name_rva = *reinterpret_cast<const uint32_t*>(desc + 12);
+        uint32_t ft       = *reinterpret_cast<const uint32_t*>(desc + 16);
+        if (name_rva == 0) break;
+
+        const char* dll_name = reinterpret_cast<const char*>(ptr_from_rva(name_rva));
+        if (!dll_name) continue;
+
+        uint32_t thunk_rva = (oft != 0) ? oft : ft;
+        uint32_t iat_rva = ft;
+        size_t ptr_size = is_64bit_ ? 8 : 4;
+
+        for (size_t i = 0; ; ++i) {
+            const uint8_t* thunk = ptr_from_rva(
+                thunk_rva + static_cast<uint32_t>(i * ptr_size));
+            if (!thunk) break;
+
+            uint64_t val = is_64bit_
+                ? *reinterpret_cast<const uint64_t*>(thunk)
+                : *reinterpret_cast<const uint32_t*>(thunk);
+            if (val == 0) break;
+
+            ImportEntry entry;
+            entry.dll_name = dll_name;
+            entry.iat_address = iat_rva + static_cast<uint32_t>(i * ptr_size);
+
+            uint64_t ordinal_flag = is_64bit_ ? (1ULL << 63) : (1ULL << 31);
+            if (val & ordinal_flag) {
+                entry.by_ordinal = true;
+                entry.ordinal = static_cast<uint16_t>(val & 0xFFFF);
+            } else {
+                uint32_t hint_rva = static_cast<uint32_t>(val & 0x7FFFFFFF);
+                const uint8_t* hint = ptr_from_rva(hint_rva);
+                if (hint) {
+                    entry.ordinal = *reinterpret_cast<const uint16_t*>(hint);
+                    entry.function_name = reinterpret_cast<const char*>(hint + 2);
+                }
+            }
+            imports.push_back(entry);
+        }
+    }
+    return imports;
+}
+
+std::vector<PeImage::ExportEntry> PeImage::parse_exports() const {
+    std::vector<ExportEntry> exports;
+    auto dir = get_data_directory(DIR_EXPORT);
+    if (dir.virtual_address == 0 || dir.size == 0) return exports;
+
+    const uint8_t* exp_base = ptr_from_rva(dir.virtual_address);
+    if (!exp_base || dir.size < 40) return exports;
+
+    uint32_t base_ordinal  = *reinterpret_cast<const uint32_t*>(exp_base + 16);
+    uint32_t num_functions = *reinterpret_cast<const uint32_t*>(exp_base + 20);
+    uint32_t num_names     = *reinterpret_cast<const uint32_t*>(exp_base + 24);
+    uint32_t addr_funcs    = *reinterpret_cast<const uint32_t*>(exp_base + 28);
+    uint32_t addr_names    = *reinterpret_cast<const uint32_t*>(exp_base + 32);
+    uint32_t addr_ords     = *reinterpret_cast<const uint32_t*>(exp_base + 36);
+
+    auto* functions = reinterpret_cast<const uint32_t*>(ptr_from_rva(addr_funcs));
+    auto* names     = reinterpret_cast<const uint32_t*>(ptr_from_rva(addr_names));
+    auto* ordinals  = reinterpret_cast<const uint16_t*>(ptr_from_rva(addr_ords));
+    if (!functions) return exports;
+
+    for (uint32_t i = 0; i < num_functions; ++i) {
+        ExportEntry entry;
+        entry.ordinal = base_ordinal + i;
+        entry.rva = functions[i];
+
+        if (entry.rva >= dir.virtual_address &&
+            entry.rva < dir.virtual_address + dir.size) {
+            entry.forwarded = true;
+            auto* fwd = reinterpret_cast<const char*>(ptr_from_rva(entry.rva));
+            if (fwd) entry.forwarder = fwd;
+        }
+
+        if (names && ordinals) {
+            for (uint32_t j = 0; j < num_names; ++j) {
+                if (ordinals[j] == i) {
+                    auto* n = reinterpret_cast<const char*>(ptr_from_rva(names[j]));
+                    if (n) entry.name = n;
+                    break;
+                }
+            }
+        }
+        exports.push_back(entry);
+    }
+    return exports;
+}
+
+

@@ -127,6 +127,28 @@ public:
     const Section* find_section(const std::string& name) const;
     const uint8_t* ptr_from_rva(uint32_t rva) const;
 
+
+    // --- Import/Export types ---
+
+    struct ImportEntry {
+        std::string dll_name;
+        std::string function_name;
+        uint16_t    ordinal     = 0;
+        bool        by_ordinal  = false;
+        uintptr_t   iat_address = 0;
+    };
+
+    struct ExportEntry {
+        std::string name;
+        uint32_t    ordinal = 0;
+        uint32_t    rva     = 0;
+        bool        forwarded = false;
+        std::string forwarder;
+    };
+
+    std::vector<ImportEntry> parse_imports() const;
+    std::vector<ExportEntry> parse_exports() const;
+
 private:
     const uint8_t* raw_data_ = nullptr;
     size_t raw_size_ = 0;
