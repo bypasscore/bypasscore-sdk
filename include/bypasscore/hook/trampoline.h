@@ -39,6 +39,22 @@ public:
                      : binary::LengthDisasm::Mode::X86);
 
         size_t min_overwrite = is_64bit ? 14 : 5;
+
+        // For very short functions (< min_overwrite bytes), try to use
+        // a relative JMP (5 bytes) on x64 if the detour is within range
+        size_t func_size = 0;
+        for (size_t off = 0; off < 64; ++off) {
+            size_t len = disasm.length(code + off);
+            if (len == 0) break;
+            off += len - 1;
+            func_size = off + 1;
+            // Check for RET (C3) or INT3 (CC) as function end
+            if (code[off] == 0xC3 || code[off] == 0xCC) break;
+        }
+        if (is_64bit && func_size > 0 && func_size < 14 && func_size >= 5) {
+            // Function is too short for 14-byte jmp, try 5-byte rel32
+            min_overwrite = 5;
+        }
         size_t stolen = disasm.calc_overwrite_size(code, min_overwrite);
         if (stolen == 0)
             return make_error("Failed to disassemble target instructions");
