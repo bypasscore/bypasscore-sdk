@@ -171,6 +171,9 @@ inline std::optional<uintptr_t> scan_process(void* process_handle,
         if (!region.is_readable()) continue;
         if (has_flag(region.access, RegionAccess::Guard)) continue;
 
+        // Skip PAGE_NOACCESS regions to prevent access violations
+        if (region.access == RegionAccess::None) continue;
+
         std::vector<uint8_t> buffer(region.size);
 #ifdef _WIN32
         SIZE_T bytes_read = 0;
