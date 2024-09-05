@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, x86]
+        config: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure CMake
+        run: cmake -B build -A ${{ matrix.arch == 'x64' && 'x64' || 'Win32' }}
+             -DBYPASSCORE_BUILD_TESTS=ON
+             -DBYPASSCORE_BUILD_EXAMPLES=ON
+             -DBYPASSCORE_BUILD_TOOLS=ON
+      - name: Build
+        run: cmake --build build --config ${{ matrix.config }}
+      - name: Test
+        run: ctest --test-dir build --build-config ${{ matrix.config }} --verbose
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+             -DBYPASSCORE_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --verbose
