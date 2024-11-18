@@ -104,6 +104,7 @@ public:
 
     Result<bool> remove() {
         if (!installed_) return true;
+        if (!iat_slot_) return make_error("IAT slot is null (already freed?)");
 #ifdef _WIN32
         memory::ProtectionGuard guard(iat_slot_, sizeof(uintptr_t),
                                       memory::RegionAccess::ReadWrite);
