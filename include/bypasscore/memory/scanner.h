@@ -191,5 +191,75 @@ inline std::optional<uintptr_t> scan_process(void* process_handle,
     return std::nullopt;
 }
 
+
+#if defined(__SSE2__) || defined(_M_X64)
+#include <immintrin.h>
+
+/**
+ * @brief SIMD-accelerated pattern scan using SSE2.
+ *
+ * Uses the first non-wildcard byte as a pivot and scans 16 bytes
+ * at a time with _mm_cmpeq_epi8 + _mm_movemask_epi8.
+ */
+inline std::optional<size_t> scan_buffer_simd(const uint8_t* data, size_t data_size,
+                                               const std::vector<PatternByte>& pattern) {
+    if (!data || data_size == 0 || pattern.empty() || pattern.size() > data_size)
+        return std::nullopt;
+
+    // Find first non-wildcard byte as pivot
+    size_t pivot = 0;
+    while (pivot < pattern.size() && pattern[pivot].wildcard) ++pivot;
+    if (pivot >= pattern.size()) {
+        // All wildcards, match at position 0
+        return static_cast<size_t>(0);
+    }
+
+    uint8_t pivot_byte = pattern[pivot].value;
+    __m128i pivot_vec = _mm_set1_epi8(static_cast<char>(pivot_byte));
+
+    size_t scan_end = data_size - pattern.size();
+    size_t i = 0;
+
+    // Process 16-byte aligned chunks
+    for (; i + 15 + pivot <= scan_end; i += 16) {
+        __m128i chunk = _mm_loadu_si128(
+            reinterpret_cast<const __m128i*>(data + i + pivot));
+        __m128i cmp = _mm_cmpeq_epi8(chunk, pivot_vec);
+        int mask = _mm_movemask_epi8(cmp);
+
+        while (mask != 0) {
+            int bit = __builtin_ctz(mask);
+            size_t candidate = i + bit;
+
+            // Verify full pattern
+            bool match = true;
+            for (size_t j = 0; j < pattern.size(); ++j) {
+                if (!pattern[j].wildcard &&
+                    data[candidate + j] != pattern[j].value) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return candidate;
+
+            mask &= mask - 1; // Clear lowest set bit
+        }
+    }
+
+    // Scalar fallback for remaining bytes
+    for (; i <= scan_end; ++i) {
+        bool match = true;
+        for (size_t j = 0; j < pattern.size(); ++j) {
+            if (!pattern[j].wildcard && data[i + j] != pattern[j].value) {
+                match = false; break;
+            }
+        }
+        if (match) return i;
+    }
+
+    return std::nullopt;
+}
+#endif
+
 } // namespace memory
 } // namespace bypasscore
