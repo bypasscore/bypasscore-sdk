@@ -100,6 +100,55 @@ public:
         return info;
     }
 
+
+    /**
+     * @brief Build an ARM64 trampoline using LDR + BR sequence.
+     *
+     * ARM64 hook: overwrites 16 bytes
+     *   LDR X16, [PC, #8]   ; 58000050
+     *   BR  X16              ; D61F0200
+     *   <8 byte abs addr>
+     */
+    static Result<Info> create_arm64(void* target) {
+        if (!target) return make_error("Null target");
+
+        // ARM64 instructions are fixed 4 bytes, so we need at least 16 bytes
+        // (4 instructions) to safely relocate
+        constexpr size_t min_overwrite = 16;
+        constexpr size_t tramp_size = 32; // Generous
+
+#ifdef _WIN32
+        uint8_t* tramp = static_cast<uint8_t*>(
+            VirtualAlloc(nullptr, tramp_size,
+                         MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+        if (!tramp) return make_error("VirtualAlloc failed for ARM64 trampoline");
+#else
+        uint8_t* tramp = static_cast<uint8_t*>(aligned_alloc(16, tramp_size));
+        if (!tramp) return make_error("Alloc failed");
+#endif
+
+        Info info;
+        info.trampoline_addr = tramp;
+        info.trampoline_size = tramp_size;
+        info.stolen_bytes    = min_overwrite;
+        info.original.assign(static_cast<uint8_t*>(target),
+                             static_cast<uint8_t*>(target) + min_overwrite);
+
+        // Copy original instructions
+        std::memcpy(tramp, target, min_overwrite);
+
+        // Append: LDR X16, [PC, #8]; BR X16; <addr>
+        size_t off = min_overwrite;
+        uint32_t ldr_x16 = 0x58000050;  // LDR X16, [PC+8]
+        uint32_t br_x16  = 0xD61F0200;  // BR X16
+        std::memcpy(&tramp[off], &ldr_x16, 4); off += 4;
+        std::memcpy(&tramp[off], &br_x16, 4);  off += 4;
+        uintptr_t ret_addr = reinterpret_cast<uintptr_t>(target) + min_overwrite;
+        std::memcpy(&tramp[off], &ret_addr, 8);
+
+        return info;
+    }
+
     static void destroy(Info& info) {
         if (info.trampoline_addr) {
 #ifdef _WIN32
