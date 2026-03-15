@@ -1,10 +1,10 @@
 #pragma once
 
-#define BYPASSCORE_VERSION_MAJOR 1
+#define BYPASSCORE_VERSION_MAJOR 4
 #define BYPASSCORE_VERSION_MINOR 0
 #define BYPASSCORE_VERSION_PATCH 0
 
-#define BYPASSCORE_VERSION_STRING "1.0.0"
+#define BYPASSCORE_VERSION_STRING "4.0.0"
 
 #define BYPASSCORE_MAKE_VERSION(major, minor, patch) \
     ((major) * 10000 + (minor) * 100 + (patch))
