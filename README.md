@@ -221,4 +221,12 @@ See [SECURITY.md](SECURITY.md) for our security policy and vulnerability reporti
 
 MIT License - see [LICENSE](LICENSE) for details.
 
+## Contact
+
+Building on BypassCore SDK? Need commercial licensing, custom modules, or integration support?
+
+- **Email:** [contact@bypasscore.com](mailto:contact@bypasscore.com)
+- **Telegram:** [@bypasscore](https://t.me/bypasscore)
+- **Web:** [bypasscore.com](https://bypasscore.com)
+
 Copyright (c) 2017-2026 BypassCore Labs
