@@ -229,4 +229,10 @@ Building on BypassCore SDK? Need commercial licensing, custom modules, or integr
 - **Telegram:** [@bypasscore](https://t.me/bypasscore)
 - **Web:** [bypasscore.com](https://bypasscore.com)
 
+## Support
+
+Help keep BypassCore open-source and independent.
+
+**USDT (Polygon):** `0xd0f38b51496bee61ea5e9e56e2c414b607ab011a`
+
 Copyright (c) 2017-2026 BypassCore Labs
